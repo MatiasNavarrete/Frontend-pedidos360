@@ -14,7 +14,7 @@ export default function App() {
   const [nuevoPed, setNuevoPed] = useState({ productoId: "", cantidad: "" });
 
   const user = accounts[0];
-  const roles = user?.idTokenClaims?.roles || ["ROLE_CLIENTE"]; // Por defecto Cliente si no tiene rol asignado aún
+  const roles = user?.idTokenClaims?.roles || ["ROLE_CLIENTE"];
   
   const esAdmin = roles.includes("ROLE_ADMIN") || roles.includes("ADMIN");
   const esOperador = roles.includes("ROLE_OPERADOR") || roles.includes("OPERADOR");
@@ -23,11 +23,31 @@ export default function App() {
   const handleLogin = () => instance.loginRedirect(loginRequest);
   const handleLogout = () => instance.logoutRedirect();
 
+  // 1. Función auxiliar para obtener el token silenciosamente
+  const obtenerConfig = async () => {
+    try {
+      const response = await instance.acquireTokenSilent({
+        ...loginRequest,
+        account: user
+      });
+      return {
+        headers: { Authorization: `Bearer ${response.accessToken}` }
+      };
+    } catch (error) {
+      console.error("Error al obtener token silencioso:", error);
+      instance.loginRedirect(loginRequest);
+      return {};
+    }
+  };
+
+  // 2. Funciones actualizadas con el token inyectado
   const cargarDatos = async () => {
     try {
-      const resCat = await api.get("/catalog");
+      const config = await obtenerConfig();
+      const resCat = await api.get("/catalog", config);
       setProductos(resCat.data);
-      const resOrd = await api.get("/orders");
+      
+      const resOrd = await api.get("/orders", config);
       setPedidos(resOrd.data);
     } catch (err) {
       console.error("Error al consultar el BFF:", err);
@@ -36,7 +56,7 @@ export default function App() {
 
   useEffect(() => {
     if (isAuthenticated) cargarDatos();
-  }, [isAuthenticated, vista]);
+  }, [isAuthenticated, vista]); 
 
   if (!isAuthenticated) {
     return (
@@ -52,25 +72,28 @@ export default function App() {
 
   const crearProducto = async (e) => {
     e.preventDefault();
-    await api.post("/catalog", nuevoProd);
+    const config = await obtenerConfig();
+    await api.post("/catalog", nuevoProd, config);
     setNuevoProd({ nombre: "", precio: "", stock: "" });
     cargarDatos();
   };
 
   const crearPedido = async (e) => {
     e.preventDefault();
+    const config = await obtenerConfig();
     await api.post("/orders", { 
       cliente: user.username, 
       productoId: Number(nuevoPed.productoId), 
       cantidad: Number(nuevoPed.cantidad) 
-    });
+    }, config);
     setNuevoPed({ productoId: "", cantidad: "" });
     cargarDatos();
   };
 
   const cambiarEstado = async (id, estado) => {
     try {
-      await api.put(`/orders/${id}/estado?nuevoEstado=${estado}`);
+      const config = await obtenerConfig();
+      await api.put(`/orders/${id}/estado?nuevoEstado=${estado}`, null, config);
       cargarDatos();
     } catch (error) {
       alert(error.response?.data || "Error al cambiar estado (Regla de negocio)");
