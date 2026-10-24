@@ -20,7 +20,7 @@ export const loginRequest = {
 export const msalInstance = new PublicClientApplication(msalConfig);
 
 export const api = axios.create({
-  baseURL: "https://fx9jac5soj.execute-api.us-east-1.amazonaws.com/api/bff"
+  baseURL: import.meta.env.VITE_BFF_URL || "http://localhost:8080/api/bff"
 });
 
 api.interceptors.request.use(async (config) => {
