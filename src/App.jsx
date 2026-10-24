@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { loginRequest, api } from "./authConfig";
+import toast, { Toaster } from "react-hot-toast"; 
+import './App.css'; 
 
 export default function App() {
   const { instance, accounts } = useMsal();
@@ -23,7 +25,17 @@ export default function App() {
   const handleLogin = () => instance.loginRedirect(loginRequest);
   const handleLogout = () => instance.logoutRedirect();
 
-  // 1. Función auxiliar para obtener el token silenciosamente
+  const getBadgeClass = (estado) => {
+    switch(estado) {
+      case 'CREADO': return 'badge badge-creado';
+      case 'ACEPTADO': return 'badge badge-aceptado';
+      case 'EN_PREPARACION': return 'badge badge-preparacion';
+      case 'DESPACHADO': return 'badge badge-despachado';
+      case 'ENTREGADO': return 'badge badge-entregado';
+      default: return 'badge badge-cancelado';
+    }
+  };
+
   const obtenerConfig = async () => {
     try {
       const response = await instance.acquireTokenSilent({
@@ -40,7 +52,6 @@ export default function App() {
     }
   };
 
-  // 2. Funciones actualizadas con el token inyectado
   const cargarDatos = async () => {
     try {
       const config = await obtenerConfig();
@@ -51,6 +62,7 @@ export default function App() {
       setPedidos(resOrd.data);
     } catch (err) {
       console.error("Error al consultar el BFF:", err);
+      toast.error("Error al cargar la información del servidor");
     }
   };
 
@@ -58,142 +70,210 @@ export default function App() {
     if (isAuthenticated) cargarDatos();
   }, [isAuthenticated, vista]); 
 
-  if (!isAuthenticated) {
-    return (
-      <div style={{ padding: "40px", fontFamily: "sans-serif", textAlign: "center" }}>
-        <h1>📦 Sistema Pedidos360</h1>
-        <p>Inicia sesión con tu cuenta de Microsoft Entra ID para acceder.</p>
-        <button onClick={handleLogin} style={{ padding: "10px 20px", fontSize: "16px", cursor: "pointer" }}>
-          Iniciar Sesión (MSAL)
-        </button>
-      </div>
-    );
-  }
-
   const crearProducto = async (e) => {
     e.preventDefault();
-    const config = await obtenerConfig();
-    await api.post("/catalog", nuevoProd, config);
-    setNuevoProd({ nombre: "", precio: "", stock: "" });
-    cargarDatos();
+    try {
+      const config = await obtenerConfig();
+      await api.post("/catalog", nuevoProd, config);
+      setNuevoProd({ nombre: "", precio: "", stock: "" });
+      toast.success("Producto agregado al catálogo");
+      cargarDatos();
+    } catch (error) {
+      toast.error("No se pudo crear el producto");
+    }
   };
 
   const crearPedido = async (e) => {
     e.preventDefault();
+    try {
+      const config = await obtenerConfig();
+      await api.post("/orders", { 
+        cliente: user.username, 
+        productoId: Number(nuevoPed.productoId), 
+        cantidad: Number(nuevoPed.cantidad) 
+      }, config);
+      setNuevoPed({ productoId: "", cantidad: "" });
+      toast.success("Pedido manual registrado");
+      cargarDatos();
+    } catch (error) {
+      toast.error("Error al registrar el pedido");
+    }
+  };
+
+  const comprarDirecto = async (productoId) => {
     const config = await obtenerConfig();
-    await api.post("/orders", { 
-      cliente: user.username, 
-      productoId: Number(nuevoPed.productoId), 
-      cantidad: Number(nuevoPed.cantidad) 
-    }, config);
-    setNuevoPed({ productoId: "", cantidad: "" });
-    cargarDatos();
+    const loadingToast = toast.loading("Procesando compra..."); // <-- Estado de carga
+    try {
+      await api.post("/orders", { 
+        cliente: user.username, 
+        productoId: Number(productoId), 
+        cantidad: 1 
+      }, config);
+      toast.success("Pedido registrado exitosamente 🚀", { id: loadingToast });
+      cargarDatos();
+    } catch (error) {
+      toast.error("Error al procesar la compra", { id: loadingToast });
+    }
   };
 
   const cambiarEstado = async (id, estado) => {
     try {
       const config = await obtenerConfig();
       await api.put(`/orders/${id}/estado?nuevoEstado=${estado}`, null, config);
+      toast.success(`Estado actualizado a: ${estado}`);
       cargarDatos();
     } catch (error) {
-      alert(error.response?.data || "Error al cambiar estado (Regla de negocio)");
+      toast.error(error.response?.data || "Error al cambiar estado (Regla de negocio)");
     }
   };
 
+  if (!isAuthenticated) {
+    return (
+      <div style={{ padding: "40px", textAlign: "center", marginTop: "10vh" }}>
+        <h1 style={{ color: "#1e3a8a", fontSize: "36px" }}>Pedidos360</h1>
+        <p>Inicia sesión con tu cuenta de Microsoft Entra ID para acceder.</p>
+        <button 
+          onClick={handleLogin} 
+          style={{ padding: "12px 24px", fontSize: "16px", cursor: "pointer", background: "#1e3a8a", color: "white", border: "none", borderRadius: "4px", marginTop: "20px" }}
+        >
+          Iniciar Sesión
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ padding: "20px", fontFamily: "sans-serif" }}>
-      {/* Barra de Navegación Protegida */}
-      <nav style={{ display: "flex", gap: "15px", borderBottom: "2px solid #ccc", paddingBottom: "10px", marginBottom: "20px" }}>
-        <strong>Pedidos360</strong>
-        <button onClick={() => setVista("dashboard")}>/dashboard</button>
-        <button onClick={() => setVista("orders")}>/orders</button>
-        {(esAdmin || esOperador) && (
-          <button onClick={() => setVista("catalog")}>/catalog (Solo Admin/Operador)</button>
-        )}
-        <span style={{ marginLeft: "auto" }}>
-          👤 {user.name || user.username} | 🏷️ Roles: <b>{roles.join(", ")}</b>
-        </span>
-        <button onClick={handleLogout}>Cerrar Sesión</button>
-      </nav>
+    <div>
+      {/* Inicializador de Toasts en la app */}
+      <Toaster position="bottom-right" reverseOrder={false} />
 
-      {/* 2. Pantalla /dashboard */}
-      {vista === "dashboard" && (
-        <div>
-          <h2>📊 Dashboard (Resumen por Rol)</h2>
-          {esAdmin && <p>🔹 <b>Vista Administrador:</b> Tienes control global del catálogo, stock y todos los pedidos.</p>}
-          {esOperador && <p>🔸 <b>Vista Operador:</b> Puedes gestionar la cola de pedidos, cambiar estados y controlar stock.</p>}
-          {esCliente && <p>🟢 <b>Vista Cliente:</b> Puedes explorar el catálogo disponible y crear/seguir tus pedidos.</p>}
-          <p>Total Productos en Catálogo: <b>{productos.length}</b> | Total Pedidos Registrados: <b>{pedidos.length}</b></p>
-        </div>
-      )}
+      {/* BARRA SUPERIOR AZUL */}
+      <header className="header">
+        <h1 className="header-logo" onClick={() => setVista("dashboard")}>Pedidos360</h1>
+        
+        <input 
+          type="text" 
+          className="header-search" 
+          placeholder="Buscar productos, marcas y más..." 
+        />
+        
+        <nav className="header-nav">
+          <button onClick={() => setVista("dashboard")}>Inicio</button>
+          <button onClick={() => setVista("orders")}>Mis Pedidos</button>
+          {(esAdmin || esOperador) && (
+            <button onClick={() => setVista("catalog")}>Panel Admin</button>
+          )}
+          <span style={{ marginLeft: "20px", color: "white", fontSize: "14px", borderLeft: "1px solid rgba(255,255,255,0.3)", paddingLeft: "20px" }}>
+            {user.name || user.username}
+          </span>
+          <button onClick={handleLogout}>Salir</button>
+        </nav>
+      </header>
 
-      {/* 3. Pantalla /orders */}
-      {vista === "orders" && (
-        <div>
-          <h2>🛒 Gestión de Pedidos (/orders)</h2>
-          <form onSubmit={crearPedido} style={{ marginBottom: "20px", padding: "10px", border: "1px solid #ddd" }}>
-            <h4>Crear Nuevo Pedido</h4>
-            <input placeholder="ID Producto" value={nuevoPed.productoId} onChange={e => setNuevoPed({...nuevoPed, productoId: e.target.value})} required />
-            <input placeholder="Cantidad" type="number" value={nuevoPed.cantidad} onChange={e => setNuevoPed({...nuevoPed, cantidad: e.target.value})} required />
-            <button type="submit">Solicitar Pedido</button>
-          </form>
-
-          <table border="1" cellPadding="8" style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th>ID</th><th>Cliente</th><th>Producto ID</th><th>Cantidad</th><th>Estado Actual</th><th>Acciones (Operador/Admin)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pedidos
-                .filter(p => esAdmin || esOperador || p.cliente === user.username)
-                .map(p => (
-                <tr key={p.id}>
-                  <td>{p.id}</td><td>{p.cliente}</td><td>{p.productoId}</td><td>{p.cantidad}</td>
-                  <td><b>{p.estado}</b></td>
-                  <td>
-                    {(esAdmin || esOperador) ? (
-                      <div style={{ display: "flex", gap: "5px" }}>
-                        <button onClick={() => cambiarEstado(p.id, "ACEPTADO")}>1. Aceptar (Baja Stock)</button>
-                        <button onClick={() => cambiarEstado(p.id, "EN_PREPARACION")}>2. Preparar</button>
-                        <button onClick={() => cambiarEstado(p.id, "DESPACHADO")}>3. Despachar</button>
-                        <button onClick={() => cambiarEstado(p.id, "ENTREGADO")}>4. Entregar</button>
-                      </div>
-                    ) : <span>Solo lectura</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* 4. Pantalla /catalog (Guard de rol) */}
-      {vista === "catalog" && (esAdmin || esOperador) && (
-        <div>
-          <h2>📦 Control de Catálogo y Stock (/catalog)</h2>
-          <form onSubmit={crearProducto} style={{ marginBottom: "20px", padding: "10px", border: "1px solid #ddd" }}>
-            <h4>Agregar Producto</h4>
-            <input placeholder="Nombre" value={nuevoProd.nombre} onChange={e => setNuevoProd({...nuevoProd, nombre: e.target.value})} required />
-            <input placeholder="Precio" type="number" value={nuevoProd.precio} onChange={e => setNuevoProd({...nuevoProd, precio: e.target.value})} required />
-            <input placeholder="Stock Inicial" type="number" value={nuevoProd.stock} onChange={e => setNuevoProd({...nuevoProd, stock: e.target.value})} required />
-            <button type="submit">Guardar Producto</button>
-          </form>
-
-          <table border="1" cellPadding="8" style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr><th>ID</th><th>Nombre</th><th>Precio</th><th>Stock Disponible</th></tr>
-            </thead>
-            <tbody>
+      <main className="main-container">
+        
+        {/* VISTA CLIENTE: GRILLA ESTILO MERCADO LIBRE */}
+        {vista === "dashboard" && (
+          <div>
+            {(esAdmin || esOperador) && (
+              <p style={{ color: "#666", marginBottom: "20px" }}>
+                Panel de {roles.join(", ")} | Total Pedidos Registrados: <b>{pedidos.length}</b>
+              </p>
+            )}
+            
+            <div className="product-grid">
               {productos.map(prod => (
-                <tr key={prod.id}>
-                  <td>{prod.id}</td><td>{prod.nombre}</td><td>${prod.precio}</td><td><b>{prod.stock}</b></td>
-                </tr>
+                <div className="product-card" key={prod.id}>
+                  {/* <-- Imagen dinámica inyectada aquí --> */}
+                  <img 
+                    src={`https://picsum.photos/seed/${prod.id + 100}/300/200`} 
+                    alt={prod.nombre} 
+                    className="product-image"
+                  />
+                  <span className="product-price">${prod.precio?.toLocaleString('es-CL')}</span>
+                  <span style={{ color: "#00a650", fontSize: "13px", fontWeight: "600", marginBottom: "5px" }}>Llega gratis mañana</span>
+                  <h2 className="product-title">{prod.nombre}</h2>
+                  <p style={{ fontSize: "12px", color: "#999", margin: "0 0 15px 0" }}>Stock: {prod.stock}</p>
+                  <button className="btn-comprar" onClick={() => comprarDirecto(prod.id)}>Comprar</button>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </div>
+          </div>
+        )}
+
+        {/* VISTA PEDIDOS (FORMULARIO Y TABLA ADMIN/OPERADOR) */}
+        {vista === "orders" && (
+          <div className="admin-section">
+            <h2>Gestión de Pedidos</h2>
+            
+            <form onSubmit={crearPedido} className="form-group">
+              <input placeholder="ID Producto" value={nuevoPed.productoId} onChange={e => setNuevoPed({...nuevoPed, productoId: e.target.value})} required />
+              <input placeholder="Cantidad" type="number" value={nuevoPed.cantidad} onChange={e => setNuevoPed({...nuevoPed, cantidad: e.target.value})} required />
+              <button type="submit">Solicitar Manualmente</button>
+            </form>
+
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>ID</th><th>Cliente</th><th>Producto ID</th><th>Cant.</th><th>Estado</th><th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pedidos
+                  .filter(p => esAdmin || esOperador || p.cliente === user.username)
+                  .map(p => (
+                  <tr key={p.id}>
+                    <td>{p.id}</td><td>{p.cliente}</td><td>{p.productoId}</td><td>{p.cantidad}</td>
+                    {/* <-- Badge dinámico de estado inyectado aquí --> */}
+                    <td>
+                      <span className={getBadgeClass(p.estado)}>
+                        {p.estado}
+                      </span>
+                    </td>
+                    <td>
+                      {(esAdmin || esOperador) ? (
+                        <div style={{ display: "flex", gap: "5px" }}>
+                          <button onClick={() => cambiarEstado(p.id, "ACEPTADO")} style={{ fontSize: "12px", padding: "8px 12px", cursor: "pointer", border: "1px solid #ccc", background: "#f9f9f9", borderRadius: "4px" }}>Aceptar</button>
+                          <button onClick={() => cambiarEstado(p.id, "EN_PREPARACION")} style={{ fontSize: "12px", padding: "8px 12px", cursor: "pointer", border: "1px solid #ccc", background: "#f9f9f9", borderRadius: "4px" }}>Preparar</button>
+                          <button onClick={() => cambiarEstado(p.id, "DESPACHADO")} style={{ fontSize: "12px", padding: "8px 12px", cursor: "pointer", border: "1px solid #ccc", background: "#f9f9f9", borderRadius: "4px" }}>Despachar</button>
+                        </div>
+                      ) : <span style={{ color: "#999", fontSize: "13px" }}>Solo lectura</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* VISTA CATÁLOGO ADMIN */}
+        {vista === "catalog" && (esAdmin || esOperador) && (
+          <div className="admin-section">
+            <h2>Control de Catálogo y Stock</h2>
+            
+            <form onSubmit={crearProducto} className="form-group">
+              <input placeholder="Nombre" value={nuevoProd.nombre} onChange={e => setNuevoProd({...nuevoProd, nombre: e.target.value})} required />
+              <input placeholder="Precio" type="number" value={nuevoProd.precio} onChange={e => setNuevoProd({...nuevoProd, precio: e.target.value})} required />
+              <input placeholder="Stock Inicial" type="number" value={nuevoProd.stock} onChange={e => setNuevoProd({...nuevoProd, stock: e.target.value})} required />
+              <button type="submit">Guardar Producto</button>
+            </form>
+
+            <table className="admin-table">
+              <thead>
+                <tr><th>ID</th><th>Nombre</th><th>Precio</th><th>Stock Disponible</th></tr>
+              </thead>
+              <tbody>
+                {productos.map(prod => (
+                  <tr key={prod.id}>
+                    <td>{prod.id}</td><td>{prod.nombre}</td><td>${prod.precio?.toLocaleString('es-CL')}</td><td><b>{prod.stock}</b></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+      </main>
     </div>
   );
 }
