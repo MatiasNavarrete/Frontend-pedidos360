@@ -1,16 +1,32 @@
-# React + Vite
+# Pedidos360 - Nombre del Microservicio: Frontend 
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+## 📋 Descripción
+Microservicio integrante de la arquitectura orientada a servicios de **Pedidos360**. Su función principal es [indicar brevemente si gestiona la interfaz/BFF, el catálogo de productos, la creación de pedidos o la administración de infraestructura] para cumplir con los requerimientos de la evaluación EP3.
 
-Currently, two official plugins are available:
+## 🛠️ Tecnologías y Versiones
+* **Lenguaje:** Java 21 (SDK 27)
+* **Framework:** Spring Boot (v4.1.1)
+* **Mensajería Cloud:** Azure Service Bus (`azure-messaging-servicebus:7.17.4`)
+* **Base de Datos:** MySQL / Spring Data JPA (si aplica)
+* **Gestor de Dependencias:** Maven
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## ⚙️ Configuración (`application.yml`)
+Para que el microservicio pueda comunicarse con la infraestructura en la nube, asegúrate de tener configuradas las siguientes propiedades en tu archivo `src/main/resources/application.yml`:
 
-## React Compiler
+```yaml
+spring:
+  cloud:
+    azure:
+      servicebus:
+        connection-string: "Endpoint=sb://sb-pedidos360-admin.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=TU_LLAVE_DE_ACCESO"
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+app:
+      mensajeria:
+        cola-pedidos: "cola-pedidos"
 
-## Expanding the Oxlint configuration
+👥 Autores y Roles en el Proyecto
+Infraestructura y Admin: Thomas Ceron
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+Productores y Conexión Azure: Matias Navarrete
+
+Consumidores Asíncronos (Listener/DLQ): Jose Romero
