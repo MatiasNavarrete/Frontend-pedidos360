@@ -18,7 +18,6 @@ spring:
   cloud:
     azure:
       servicebus:
-        connection-string: "Endpoint=sb://sb-pedidos360-admin.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=TU_LLAVE_DE_ACCESO"
 
 app:
       mensajeria:
